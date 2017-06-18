@@ -1,0 +1,173 @@
+<?php
+function reservations_pin_menu() {
+
+  $items = array();
+   
+  $items['admin/config/reservations/reservations_pin'] =
+    array(
+          'title' => 'Reservation Pin Settings Form',
+	  'description' => 'Reservation Pin Settings Form',
+	  'page callback' => 'drupal_get_form',
+	  'page arguments' => array('reservations_pin_settings_form'),
+	  'access callback' => 'reservations_pin_admin_callback',
+	  'type' => MENU_NORMAL_ITEM,
+	  );
+
+  return $items;
+}
+
+function reservations_pin_admin_callback() {
+  //fixme limit to reservations managers or admins
+  if (user_access('administer reservations') ||
+      user_access('administer users')) {
+    return TRUE;
+  }
+  else {
+    return FALSE;
+  }
+}
+
+
+function reservations_pin_node_validate($node) {
+  if ($node->type != 'reservations_reservation') {
+    return;
+  }
+
+  //get value
+  $pin = $node->reservations_pin;
+
+  $uid = reservations_pin_get_uid_for_pin($pin);
+  if (!$uid) {
+    form_set_error('reservations_pin', "You must enter in a valid PIN.");
+    return;
+  }
+}
+ 
+function reservations_pin_get_uid_for_pin($pin) {
+  $staff_users = reservations_pin_get_staff_users();
+
+  $count = count($staff_users);
+  $counter = 0;
+  foreach ($staff_users as $id=>$name) {
+    $counter ++;
+    $var_name = "reservations_pin_" . $id;
+
+    $staff_pin = variable_get($var_name, '');
+
+    if ($pin && $staff_pin == $pin) {
+      return $id;
+    }
+  }
+  return NULL;
+}
+function reservations_pin_form_alter(&$form, &$form_state, $form_id) {
+  if (isset($form['#node_edit_form']) && $form['#node_edit_form']
+      && $form['type']['#value'] == 'reservations_reservation') {
+    
+    $form['reservations_pin'] =
+      array('#type' => 'textfield',
+	    '#title' => 'Operator Pin Number',
+	    '#size' => 20,
+	    '#required' => TRUE);
+  }
+}
+
+function reservations_pin_settings_form($form, $form_state) {
+
+  $form = array();
+  $form['pin_form'] = array(
+				 '#type' => 'fieldset',
+				 '#title' => t('Programming Slot Grid'),
+				 );
+
+  $staff_users = reservations_pin_get_staff_users();
+
+  $count = count($staff_users);
+  $counter = 0;
+  foreach ($staff_users as $id=>$name) {
+    $counter ++;
+    $var_name = "reservations_pin_" . $id;
+
+    $default_value = variable_get($var_name, '');
+
+    $prefix = $suffix = '';
+    if ($counter == 1) {
+      $prefix .= "<table class='reservations_pin_settings'><tr>";
+    }
+    
+    $prefix .= "<td width=300>";
+    
+
+    $form['pin_form'][$var_name.'_markup'] = 
+      array(
+	    '#type' => 'markup',
+	    '#markup' => "<strong>".$name."</strong>",
+	    '#prefix' => $prefix,
+	    '#suffix' => "</td>",
+	    );
+
+    if ($counter == $count) {
+      $suffix = "</td></tr></table>";
+    }
+    else {
+      $suffix = "</td></tr>";
+    }
+    $form['pin_form'][$var_name] = 
+      array(
+	    '#type' => 'textfield',
+	    '#title' => "Pin",
+	    '#default_value' => $default_value,
+	    '#size' => 10,
+	    '#prefix' => "<td>",
+	    '#suffix' => $suffix,
+	    );
+
+  }
+
+  $form['pin_form']['submit'] = array(
+				       '#type' => 'submit',
+				       '#value' => t('Save'),
+				       );
+  return system_settings_form($form);
+
+}
+
+function reservations_pin_get_staff_users() {
+  $query = new EntityFieldQuery;
+  $query
+    ->entityCondition('entity_type', 'user')
+    ->addTag('role_filter');
+  $results = $query->execute();
+  
+  $ret = array();
+  foreach($results['user'] as $uid=>$result) {
+    $user = user_load($uid);
+    $ret[$uid] = $user->realname . " (".$user->name.")";
+  }
+  asort($ret);
+  return $ret;
+}
+
+/**
+ * Implement hook_query_TAG_alter
+ * 
+ * @param QueryAlterableInterface $query
+ */
+function reservations_pin_query_role_filter_alter(QueryAlterableInterface $query) {
+  $role_id = variable_get('reservations_pin_role', 5);
+  $query->leftJoin('users_roles', 'r', 'users.uid = r.uid');  
+  $and = db_and()->condition('r.rid', $role_id, '=');
+  $query->condition($and);
+}
+
+function reservations_pin_reservations_operator_history_user_alter(&$user, 
+							       &$reservation) {
+  $pin = $reservation->reservations_pin;
+
+  $uid = reservations_pin_get_uid_for_pin($pin);
+  if ($uid) {
+    $new_user = $uid ? user_load($uid) : NULL;
+    $user = $new_user ? $new_user : $user;
+  }
+
+}

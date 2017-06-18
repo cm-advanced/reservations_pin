@@ -1,0 +1,9 @@
+name = CMA Reservations: Pin Number
+description = Module will allow force operators to enter a pin number when creating/editing a reservation.  
+configure = admin/config/reservations/reservations_pin
+
+core = 7.x
+package = Community Media Advanced
+version = 7.x-1.0
+project = "reservations_pin"
+project_status_url = https://github.com/cm-advanced/reservations_pin
